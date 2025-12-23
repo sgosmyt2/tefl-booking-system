@@ -1,45 +1,12 @@
 from flask import Flask, jsonify, request
 from datetime import datetime, timedelta, timezone
-from .database import init_db, get_connection
+from .database import init_db, get_connection, get_all_bookings, insert_booking, delete_booking
 
 
 app = Flask(__name__)
 
 # Creating the database within the application
 init_db()
-
-def get_all_bookings():
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT start, end FROM bookings")
-    rows = cursor.fetchall()
-
-    conn.close()
-
-    return [{"start": row[0], "end": row[1]} for row in rows]
-
-def insert_booking(start, end):
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("INSERT INTO bookings (start, end) VALUES (?, ?)", (start, end))
-
-    conn.commit()
-    conn.close()
-
-def delete_booking(start, end):
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM bookings WHERE start = ? AND end = ?", (start, end))
-
-    deleted = cursor.rowcount
-    conn.commit()
-    conn.close()
-
-    return deleted > 0
-
 
 def parse_iso(dt_str):
     return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
@@ -70,8 +37,8 @@ def book():
     data = request.get_json()
     current_bookings = get_all_bookings()
 
-    if not data or "start" not in data or "end" not in data:
-        return jsonify({"error": "Missing start or end time"}), 400
+    if not data or not all(k in data for k in ("start", "end", "student_name", "student_timezone")):
+        return jsonify({"error": "Missing booking information"}), 400
     
     requested_slot = {
         "start": data["start"],
@@ -84,7 +51,12 @@ def book():
                 "error": "Requested slot overlaps with existing availability"
             }), 409
         
-    insert_booking(requested_slot["start"], requested_slot["end"])
+    insert_booking(
+        requested_slot["start"], 
+        requested_slot["end"],
+        data["student_name"],
+        data["student_timezone"]
+        )
 
     return jsonify({
         "message": "Lesson successfully booked",
