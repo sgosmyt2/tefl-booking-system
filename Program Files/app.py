@@ -1,24 +1,39 @@
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request
 from datetime import datetime, timedelta, timezone
-import os
+from database import init_db, get_connection
+
 
 app = Flask(__name__)
 
-#Hardcoded availability calendar for testing
-available_slots = [
-    {
-        "start": "2025-12-23T14:00:00Z",
-        "end": "2025-12-23T15:00:00Z"
-    },
-    {
-        "start": "2025-12-23T15:30:00Z",
-        "end": "2025-12-23T16:30:00Z"
-    },
-]
+# Creating the database within the application
+init_db()
+
+def get_all_bookings():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT start, end FROM bookings")
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [{"start": row[0], "end": row[1]} for row in rows]
+
+def insert_booking(start, end):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    conn.execute("INSERT INTO bookings (start, end) VALUES (?, ?)", (start, end))
+
+    conn.commit()
+    conn.close()
+
 
 def parse_iso(dt_str):
     return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
 
+# Overlapping booking slot logic, if the start time of slot A is before the end time of slot B, 
+# and the end time of A is greater than the start time of B then it must have a time overlap
 def overlaps(slot_a, slot_b):
     start_a = parse_iso(slot_a["start"])
     end_a =  parse_iso(slot_a["end"])
@@ -31,39 +46,17 @@ def overlaps(slot_a, slot_b):
 def home():
     return "Booking System Initialised."
 
-# Ignore all this its just something silly and messing around with html and css in Flask
-@app.route('/beautifulgirlfriend')
-def gf():
-    return """
-    <h1>Mi novia thalia es muy hermosa <3</h1>
-    
-    <div style="display: flex; gap: 20px;">
-        <div>
-            <h2>su cara perfecta</h2>
-            <img src="/image/micorazón.jpg" alt="mi corazón" style="max-width: 400px;">
-        </div>
-        <div>
-            <h2>su cara despues viendo este</h2>
-            <img src="/image/lacarademiamor.jpg" alt="another image" style="max-width: 400px;">
-        </div>
-    </div>
-    """
-
-@app.route('/image/<filename>')
-def get_image(filename):
-    image_path = os.path.join(os.path.dirname(__file__), f'images/{filename}')
-    return send_file(image_path, mimetype='image/jpeg')
-
-
 # Creates the availability page to show available timeslots
 @app.route('/availability', methods=['GET'])
 def availability():
-    return jsonify(available_slots)
+    bookings = get_all_bookings()
+    return jsonify(bookings)
 
 # Booking page to select 
 @app.route('/book', methods=['POST'])
 def book():
     data = request.get_json()
+    current_bookings = get_all_bookings()
 
     if not data or "start" not in data or "end" not in data:
         return jsonify({"error": "Missing start or end time"}), 400
@@ -73,13 +66,13 @@ def book():
         "end": data["end"]
     }
 
-    for slot in available_slots:
+    for slot in current_bookings:
         if overlaps(slot, requested_slot):
             return jsonify({
                 "error": "Requested slot overlaps with existing availability"
             }), 409
         
-    available_slots.append(requested_slot)
+    insert_booking(requested_slot["start"], requested_slot["end"])
 
     return jsonify({
         "message": "Lesson successfully booked",
