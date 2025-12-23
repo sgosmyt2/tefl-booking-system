@@ -15,7 +15,7 @@ This project is a personal learning portfolio project exploring backend dev with
 - View available slots through a REST API
 - Book lessons through a POST request
 - Prevent double booking and overlapping time slots
-- Simple persistent storage with SQLite
+- Persistent storage with SQLite, adding and cancelling bookings
 
 ## Planned extensions
 

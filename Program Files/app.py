@@ -23,10 +23,22 @@ def insert_booking(start, end):
     conn = get_connection()
     cursor = conn.cursor()
 
-    conn.execute("INSERT INTO bookings (start, end) VALUES (?, ?)", (start, end))
+    cursor.execute("INSERT INTO bookings (start, end) VALUES (?, ?)", (start, end))
 
     conn.commit()
     conn.close()
+
+def delete_booking(start, end):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM bookings WHERE start = ? AND end = ?", (start, end))
+
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return deleted > 0
 
 
 def parse_iso(dt_str):
@@ -78,6 +90,28 @@ def book():
         "message": "Lesson successfully booked",
         "slot": requested_slot
     }), 200
+
+# Route for cancelling a booking that exists in the database
+@app.route('/cancel', methods=['POST'])
+def cancel():
+    data = request.get_json()
+
+    if not data or "start" not in data or "end" not in data:
+        return jsonify({
+            "error": "No valid start or end time slot"
+            }), 400
+    
+    success = delete_booking(data["start"], data["end"])
+
+    if not success:
+        return jsonify({
+            "error": "Booking not found"
+        }), 404
+    
+    return jsonify({
+        "message": "Booking successfully cancelled"
+    }), 200
+
 
 # Main
 if __name__ == "__main__":
